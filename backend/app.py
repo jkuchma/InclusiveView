@@ -180,4 +180,4 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_text(json.dumps(payload))
             await asyncio.sleep(0.1)
     except WebSocketDisconnect:
-        print("Frontend disconnected")
+        print("Frontend disconnected.")
