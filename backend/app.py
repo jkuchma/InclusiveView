@@ -49,6 +49,9 @@ def classify_posture(result: PoseLandmarkerResult) -> dict:
     def lm(index: int):
         return landmarks[index]
 
+    def vis(index: int) -> float:
+        return landmarks[index].visibility if hasattr(landmarks[index], 'visibility') else 1.0
+
     LEFT_SHOULDER = 11
     RIGHT_SHOULDER = 12
     LEFT_HIP = 23
@@ -68,23 +71,38 @@ def classify_posture(result: PoseLandmarkerResult) -> dict:
     shoulder_y = (left_shoulder.y + right_shoulder.y) / 2.0
     hip_y = (left_hip.y + right_hip.y) / 2.0
     knee_y = (left_knee.y + right_knee.y) / 2.0
+    shoulder_spread = abs(left_shoulder.x - right_shoulder.x)
 
-    torso_len = abs(hip_y - shoulder_y)
-    hip_to_knee = abs(knee_y - hip_y)
+    # Use face size (nose-to-shoulder distance) for distance when hips not visible
+    nose_to_shoulder = abs(nose.y - shoulder_y)
+    hips_visible = (vis(LEFT_HIP) > 0.3 and vis(RIGHT_HIP) > 0.3)
 
-    if torso_len > 0.32:
+    torso_len = abs(hip_y - shoulder_y) if hips_visible else nose_to_shoulder * 0.8
+    hip_to_knee = abs(knee_y - hip_y) if hips_visible else 0.5  # assume standing if hips not visible
+
+    # Distance from nose-to-shoulder ratio (larger = closer)
+    if nose_to_shoulder > 0.18:
         distance = "close"
-    elif torso_len > 0.20:
+    elif nose_to_shoulder > 0.10:
         distance = "medium"
     else:
         distance = "far"
 
-    if hip_to_knee < 0.12:
+    if not hips_visible:
+        # Only upper body visible — classify from shoulder position in frame
+        if shoulder_y > 0.6:
+            posture = "seated"
+        else:
+            posture = "standing"
+    elif hip_to_knee < 0.12:
         posture = "seated"
     elif torso_len < 0.12:
         posture = "unknown"
     elif nose.y < shoulder_y < hip_y < knee_y:
-        posture = "standing"
+        if torso_len < 0.18 and shoulder_spread < 0.18:
+            posture = "child"
+        else:
+            posture = "standing"
     else:
         posture = "crouched"
 
@@ -108,13 +126,15 @@ def camera_loop() -> None:
         base_options=BaseOptions(model_asset_path=MODEL_PATH),
         running_mode=RunningMode.LIVE_STREAM,
         num_poses=1,
-        min_pose_detection_confidence=0.5,
-        min_pose_presence_confidence=0.5,
-        min_tracking_confidence=0.5,
+        min_pose_detection_confidence=0.3,
+        min_pose_presence_confidence=0.3,
+        min_tracking_confidence=0.3,
         result_callback=result_callback,
     )
 
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    import platform
+    backend_id = cv2.CAP_DSHOW if platform.system() == "Windows" else cv2.CAP_ANY
+    cap = cv2.VideoCapture(0, backend_id)
 
     if not cap.isOpened():
         print("ERROR: Could not open webcam.")
@@ -133,28 +153,11 @@ def camera_loop() -> None:
             timestamp_ms = int(time.time() * 1000)
             landmarker.detect_async(mp_image, timestamp_ms)
 
-            with state_lock:
-                state_copy = latest_state.copy()
-
-            text = f"Posture: {state_copy['posture']} | Distance: {state_copy['distance']}"
-            cv2.putText(
-                frame,
-                text,
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 0),
-                2,
-                cv2.LINE_AA,
-            )
-
-            cv2.imshow("InclusiveView Pose Debug", frame)
-
-            if cv2.waitKey(1) & 0xFF == 27:
-                break
+            # cv2.imshow is not safe from background threads on macOS.
+            # Pose state is streamed to the frontend via WebSocket instead.
+            time.sleep(0.01)  # ~100 fps cap to avoid busy-spin
 
     cap.release()
-    cv2.destroyAllWindows()
 
 
 @app.on_event("startup")
