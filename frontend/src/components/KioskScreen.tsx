@@ -141,6 +141,25 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
           How can we help you today?
         </h2>
 
+        {/* ── Distance mode helper text ── */}
+        {sensor.distance === "close" && (
+          <div
+            style={{
+              marginBottom: 18,
+              padding: "10px 16px",
+              borderRadius: 12,
+              background: highContrast ? "#222200" : "#102744",
+              border: `2px solid ${accentColor}`,
+              color: textPrimary,
+              fontSize: 14 * fontScale,
+              fontWeight: 600,
+            }}
+            className={TRANSITION}
+          >
+            Larger text and higher contrast enabled for closer viewing distance
+          </div>
+        )}
+
         {/* ── Menu Grid ── */}
         <div
           style={{
