@@ -2,11 +2,31 @@ import asyncio
 import json
 import threading
 import time
+from collections import deque
 
 import cv2
 import mediapipe as mp
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+
+# ── Stabilization config ──────────────────────────────────────────────────────
+HISTORY_LEN = 10       # frames kept in the sliding window
+STABLE_THRESHOLD = 6   # majority needed to commit a new value
+
+
+def _mode(history: deque, fallback: str) -> str:
+    """Return the most common value if it meets STABLE_THRESHOLD, else fallback."""
+    if not history:
+        return fallback
+    counts: dict[str, int] = {}
+    for v in history:
+        counts[v] = counts.get(v, 0) + 1
+    best = max(counts, key=lambda k: counts[k])
+    return best if counts[best] >= STABLE_THRESHOLD else fallback
+
+
+posture_history: deque = deque(maxlen=HISTORY_LEN)
+distance_history: deque = deque(maxlen=HISTORY_LEN)
 
 app = FastAPI(title="InclusiveView Backend")
 
@@ -81,16 +101,17 @@ def classify_posture(result: PoseLandmarkerResult) -> dict:
     hip_to_knee = abs(knee_y - hip_y) if hips_visible else 0.5  # assume standing if hips not visible
 
     if hips_visible:
-        if torso_len > 0.40:
+        # Thresholds tuned for a typical ~60 cm – 150 cm standing range
+        if torso_len > 0.38:
             distance = "close"
-        elif torso_len > 0.22:
+        elif torso_len > 0.20:
             distance = "medium"
         else:
             distance = "far"
     else:
-        if nose_to_shoulder > 0.20:
+        if nose_to_shoulder > 0.18:
             distance = "close"
-        elif nose_to_shoulder > 0.12:
+        elif nose_to_shoulder > 0.10:
             distance = "medium"
         else:
             distance = "far"
@@ -121,11 +142,29 @@ def classify_posture(result: PoseLandmarkerResult) -> dict:
 
 
 def result_callback(result: PoseLandmarkerResult, output_image: mp.Image, timestamp_ms: int) -> None:
-    posture_data = classify_posture(result)
-    posture_data["timestamp_ms"] = timestamp_ms
+    raw = classify_posture(result)
+
+    # Feed raw values into history windows
+    posture_history.append(raw["posture"])
+    distance_history.append(raw["distance"])
+
+    # Use current stable value as fallback so we never flip to "unknown" on a bad frame
+    with state_lock:
+        current_posture = latest_state["posture"]
+        current_distance = latest_state["distance"]
+
+    stable_posture = _mode(posture_history, current_posture)
+    stable_distance = _mode(distance_history, current_distance)
+
+    stabilized = {
+        "posture": stable_posture,
+        "distance": stable_distance,
+        "landmarks_detected": raw["landmarks_detected"],
+        "timestamp_ms": timestamp_ms,
+    }
 
     with state_lock:
-        latest_state.update(posture_data)
+        latest_state.update(stabilized)
 
 
 def camera_loop() -> None:
