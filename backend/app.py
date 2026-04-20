@@ -80,13 +80,20 @@ def classify_posture(result: PoseLandmarkerResult) -> dict:
     torso_len = abs(hip_y - shoulder_y) if hips_visible else nose_to_shoulder * 0.8
     hip_to_knee = abs(knee_y - hip_y) if hips_visible else 0.5  # assume standing if hips not visible
 
-    # Distance from nose-to-shoulder ratio (larger = closer)
-    if nose_to_shoulder > 0.18:
-        distance = "close"
-    elif nose_to_shoulder > 0.10:
-        distance = "medium"
+    if hips_visible:
+        if torso_len > 0.40:
+            distance = "close"
+        elif torso_len > 0.22:
+            distance = "medium"
+        else:
+            distance = "far"
     else:
-        distance = "far"
+        if nose_to_shoulder > 0.20:
+            distance = "close"
+        elif nose_to_shoulder > 0.12:
+            distance = "medium"
+        else:
+            distance = "far"
 
     if not hips_visible:
         # Only upper body visible — classify from shoulder position in frame

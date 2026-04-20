@@ -1,3 +1,8 @@
+Backend:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 python -m uvicorn app:app --reload
+
+Frontend:
+npm install
+npm run dev

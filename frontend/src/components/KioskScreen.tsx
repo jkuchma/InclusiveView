@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { AdaptationParams, SensorState } from "../types/adaptation";
 
 interface KioskScreenProps {
@@ -8,18 +8,19 @@ interface KioskScreenProps {
 
 // Main menu tiles
 const MENU_ITEMS = [
-  { id: "checkin", icon: "✈", label: "Check In", sub: "Flight check-in & boarding pass" },
-  { id: "wayfinding", icon: "🗺", label: "Wayfinding", sub: "Terminal maps & directions" },
+  { id: "checkin", icon: "✈", label: "Check in", sub: "Flight check-in and boarding pass" },
+  { id: "wayfinding", icon: "🗺", label: "Wayfinding", sub: "Terminal maps and directions" },
   { id: "arrivals", icon: "🛬", label: "Arrivals", sub: "View arriving flights" },
   { id: "departures", icon: "🛫", label: "Departures", sub: "View departing flights" },
-  { id: "services", icon: "🛎", label: "Services", sub: "Lounges, shops & dining" },
-  { id: "help", icon: "❓", label: "Help", sub: "Assistance & accessibility" },
+  { id: "services", icon: "🛎", label: "Services", sub: "Lounges, shops, and dining" },
+  { id: "help", icon: "❓", label: "Help", sub: "Assistance and accessibility" },
 ];
 
 const TRANSITION = "transition-all duration-500 ease-in-out";
 
 export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) => {
   const [activePage, setActivePage] = useState<string | null>(null);
+  const lastAnnouncementRef = useRef<string>("");
 
   const {
     layoutOffsetPercent,
@@ -29,16 +30,80 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
     voiceMode,
   } = adaptation;
 
+  const isAccessibilityMode = highContrast || voiceMode || sensor.distance === "close";
+
+  const speak = (text: string) => {
+    if (!("speechSynthesis" in window)) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const clearAnnouncementMemory = () => {
+    lastAnnouncementRef.current = "";
+  };
+
+  const getMainMenuGuidance = () => {
+    return "Voice guidance enabled. Main menu. Options are Check In, Wayfinding, Arrivals, Departures, Services, and Help. Press tab to move through options and enter to select.";
+  };
+
+  const getDetailPageGuidance = (page: string) => {
+    const pageContent = PAGE_CONTENT[page];
+    if (!pageContent) {
+      return "Voice guidance enabled. Page loaded.";
+    }
+
+    return `${pageContent.title}. ${pageContent.body} Press the back button to return to the main menu.`;
+  };
+
+  const announceSelection = (label: string, sub: string) => {
+    if (!voiceMode) return;
+
+    const announcement = `${label}. ${sub}`;
+
+    if (announcement !== lastAnnouncementRef.current) {
+      speak(announcement);
+      lastAnnouncementRef.current = announcement;
+    }
+  };
+
+  useEffect(() => {
+    if (!voiceMode) {
+      window.speechSynthesis?.cancel();
+      lastAnnouncementRef.current = "";
+      return;
+    }
+
+    const announcement = activePage
+      ? getDetailPageGuidance(activePage)
+      : getMainMenuGuidance();
+
+    if (announcement !== lastAnnouncementRef.current) {
+      speak(announcement);
+      lastAnnouncementRef.current = announcement;
+    }
+
+    return () => {
+      window.speechSynthesis?.cancel();
+    };
+  }, [voiceMode, activePage]);
+
   // ── Derived style variables ─────────────────────────────────────────
   const bg = highContrast ? "#000000" : "#0a1628";
-  const cardBg = highContrast ? "#1a1a1a" : "#0d2244";
+  const cardBg = highContrast ? "#111111" : "#0d2244";
   const cardBorder = highContrast ? "#ffffff" : "#1e3a6e";
   const textPrimary = highContrast ? "#ffffff" : "#e8f0fe";
-  const textSecondary = highContrast ? "#cccccc" : "#8aabcf";
+  const textSecondary = highContrast ? "#f0f0f0" : "#8aabcf";
   const accentColor = highContrast ? "#ffff00" : "#4285f4";
-  const accentHover = highContrast ? "#ffffaa" : "#5a95ff";
-  const headerBg = highContrast ? "#222200" : "#061020";
-  const statusBarBg = highContrast ? "#111100" : "#061020";
+  const accentHover = highContrast ? "#fff799" : "#5a95ff";
+  const headerBg = highContrast ? "#111111" : "#061020";
+  const statusBarBg = highContrast ? "#111111" : "#061020";
 
   const baseFontPx = 16 * fontScale;
   const titleFontPx = 28 * fontScale;
@@ -56,7 +121,13 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
     return (
       <DetailPage
         page={activePage}
-        onBack={() => setActivePage(null)}
+        onBack={() => {
+          if (voiceMode) {
+            speak("Returning to main menu");
+            lastAnnouncementRef.current = "Returning to main menu";
+          }
+          setActivePage(null);
+        }}
         adaptation={adaptation}
         bg={bg}
         cardBg={cardBg}
@@ -79,10 +150,31 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
         fontSize: baseFontPx,
         display: "flex",
         flexDirection: "column",
+        position: "relative",
       }}
       className={TRANSITION}
     >
-      {/* ── Header ── */}
+      {isAccessibilityMode && (
+        <div
+          style={{
+            position: "fixed",
+            top: 18,
+            right: 24,
+            background: accentColor,
+            color: highContrast ? "#000000" : "#ffffff",
+            padding: "8px 14px",
+            borderRadius: 10,
+            fontWeight: 700,
+            fontSize: 13 * fontScale,
+            zIndex: 100,
+            boxShadow: `0 0 18px ${accentColor}66`,
+          }}
+          className={TRANSITION}
+        >
+          Accessibility Mode
+        </div>
+      )}
+
       <header
         style={{
           background: headerBg,
@@ -95,7 +187,7 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ fontSize: 32 }}>🏛</span>
+          <span style={{ fontSize: 32 * fontScale }}>🏛</span>
           <div>
             <div style={{ fontSize: titleFontPx, fontWeight: 700, letterSpacing: 1 }}>
               City Services Kiosk
@@ -115,7 +207,6 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
         </div>
       </header>
 
-      {/* ── Main content panel (offset by posture) ── */}
       <div
         style={{
           flex: 1,
@@ -141,7 +232,24 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
           How can we help you today?
         </h2>
 
-        {/* ── Menu Grid ── */}
+        {sensor.distance === "close" && (
+          <div
+            style={{
+              marginBottom: 18,
+              padding: "10px 16px",
+              borderRadius: 12,
+              background: highContrast ? "#222200" : "#102744",
+              border: `2px solid ${accentColor}`,
+              color: textPrimary,
+              fontSize: 14 * fontScale,
+              fontWeight: 600,
+            }}
+            className={TRANSITION}
+          >
+            Larger text and higher contrast enabled for closer viewing distance
+          </div>
+        )}
+
         <div
           style={{
             display: "grid",
@@ -154,10 +262,35 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
           {MENU_ITEMS.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActivePage(item.id)}
+              onClick={() => {
+                if (voiceMode) {
+                  speak(`Opening ${item.label}`);
+                  lastAnnouncementRef.current = `Opening ${item.label}`;
+                }
+                setActivePage(item.id);
+              }}
+              onMouseEnter={(e) => {
+                announceSelection(item.label, item.sub);
+                (e.currentTarget as HTMLButtonElement).style.background = highContrast ? "#2a2a00" : "#122d52";
+                (e.currentTarget as HTMLButtonElement).style.borderColor = accentHover;
+                (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.03)";
+              }}
+              onFocus={() => {
+                announceSelection(item.label, item.sub);
+              }}
+              onMouseLeave={(e) => {
+                clearAnnouncementMemory();
+                (e.currentTarget as HTMLButtonElement).style.background = cardBg;
+                (e.currentTarget as HTMLButtonElement).style.borderColor = cardBorder;
+                (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+              onBlur={() => {
+                clearAnnouncementMemory();
+              }}
+              aria-label={`${item.label}: ${item.sub}`}
               style={{
                 background: cardBg,
-                border: `1.5px solid ${cardBorder}`,
+                border: `2px solid ${cardBorder}`,
                 borderRadius: 16,
                 padding: "22px 18px",
                 cursor: "pointer",
@@ -167,22 +300,12 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
                 alignItems: "center",
                 gap: 10,
                 minHeight: tileMinH,
-                transition: "background 0.2s, border-color 0.2s, transform 0.1s",
+                boxShadow: highContrast ? `0 0 0 1px ${accentColor}` : "none",
+                transition: "background 0.2s, border-color 0.2s, transform 0.1s, box-shadow 0.2s",
               }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = highContrast ? "#333300" : "#122d52";
-                (e.currentTarget as HTMLButtonElement).style.borderColor = accentHover;
-                (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.03)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = cardBg;
-                (e.currentTarget as HTMLButtonElement).style.borderColor = cardBorder;
-                (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
-              }}
-              aria-label={`${item.label}: ${item.sub}`}
             >
               <span style={{ fontSize: tileIconPx, lineHeight: 1 }}>{item.icon}</span>
-              <span style={{ fontSize: tileLabelPx, fontWeight: 600 }}>{item.label}</span>
+              <span style={{ fontSize: tileLabelPx, fontWeight: 700 }}>{item.label}</span>
               <span style={{ fontSize: tileSubPx, color: textSecondary, textAlign: "center" }}>
                 {item.sub}
               </span>
@@ -190,8 +313,7 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
           ))}
         </div>
 
-        {/* ── Language selector ── */}
-        <div style={{ marginTop: 28, display: "flex", gap: 12 }}>
+        <div style={{ marginTop: 28, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
           {["English", "Español", "中文", "العربية"].map((lang) => (
             <button
               key={lang}
@@ -211,7 +333,6 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
         </div>
       </div>
 
-      {/* ── Voice Assistant Banner ── */}
       {voiceMode && (
         <div
           style={{
@@ -237,7 +358,7 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
               Voice Assistance Active
             </div>
             <div style={{ fontSize: 13 * fontScale, color: textSecondary }}>
-              Say a menu option or press a button for spoken guidance
+              Hover, tab, or select a menu option for spoken guidance
             </div>
           </div>
           <div
@@ -255,7 +376,6 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
         </div>
       )}
 
-      {/* ── Status bar ── */}
       <footer
         style={{
           background: statusBarBg,
@@ -278,8 +398,14 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
       </footer>
 
       <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        @keyframes pulse { 0%,100% { opacity: 0.4; transform: scaleY(0.8); } 50% { opacity: 1; transform: scaleY(1.2); } }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes pulse {
+          0%,100% { opacity: 0.4; transform: scaleY(0.8); }
+          50% { opacity: 1; transform: scaleY(1.2); }
+        }
       `}</style>
     </div>
   );
@@ -316,19 +442,48 @@ const DetailPage: React.FC<DetailPageProps> = ({
 
   return (
     <div
-      style={{ minHeight: "100vh", background: bg, color: textPrimary, fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: baseFontPx, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 40 }}
+      style={{
+        minHeight: "100vh",
+        background: bg,
+        color: textPrimary,
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        fontSize: baseFontPx,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 40
+      }}
       className={TRANSITION}
     >
       <div
-        style={{ background: cardBg, borderRadius: 20, padding: 40, maxWidth: 680, width: "100%", transform: `translateY(${layoutOffsetPercent}px)` }}
+        style={{
+          background: cardBg,
+          borderRadius: 20,
+          padding: 40,
+          maxWidth: 680,
+          width: "100%",
+          transform: `translateY(${layoutOffsetPercent}px)`
+        }}
         className={TRANSITION}
       >
         <div style={{ fontSize: 52, marginBottom: 16 }}>{content.icon}</div>
-        <h1 style={{ fontSize: titleFontPx, fontWeight: 700, marginBottom: 16, color: accentColor }}>{content.title}</h1>
+        <h1 style={{ fontSize: titleFontPx, fontWeight: 700, marginBottom: 16, color: accentColor }}>
+          {content.title}
+        </h1>
         <p style={{ lineHeight: 1.7, color: textPrimary, marginBottom: 32 }}>{content.body}</p>
         <button
           onClick={onBack}
-          style={{ background: accentColor, border: "none", borderRadius: 10, padding: "14px 32px", fontSize: baseFontPx, fontWeight: 600, color: "#fff", cursor: "pointer" }}
+          style={{
+            background: accentColor,
+            border: "none",
+            borderRadius: 10,
+            padding: "14px 32px",
+            fontSize: baseFontPx,
+            fontWeight: 600,
+            color: "#fff",
+            cursor: "pointer"
+          }}
         >
           ← Back to Main Menu
         </button>

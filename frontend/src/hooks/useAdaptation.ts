@@ -48,7 +48,7 @@ function deriveAdaptation(
   // ── Distance-based visual adaptation ────────────────────────────────
   if (sensor.distance === "close") {
     // User close → low vision indicator: increase font + contrast
-    fontScale = Math.max(fontScale, 1.35);
+    fontScale = Math.max(fontScale, 1.6);
     highContrast = true;
     label += " | Close (Low Vision Mode)";
   } else if (sensor.distance === "far") {
