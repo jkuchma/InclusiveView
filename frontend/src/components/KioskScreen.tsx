@@ -234,6 +234,17 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
   const { layoutOffsetPercent, fontScale, highContrast, buttonScale, voiceMode } = adaptation;
   const isAccessibilityMode = highContrast || voiceMode || sensor.distance === "close";
 
+  // ── Posture-based layout config ────────────────────────────────────────────
+  const isWheelchair = sensor.posture === "seated";
+  const isChild = sensor.posture === "child";
+  const isLoweredLayout = isWheelchair || isChild;
+  // 2-column grid for wheelchair / child (bigger tiles, easier reach)
+  const gridCols = isLoweredLayout ? 2 : 3;
+  // flex-end anchors buttons to the bottom half of the screen
+  const contentJustify = isLoweredLayout ? "flex-end" : "center";
+  const contentPaddingBottom = isWheelchair ? "90px" : isChild ? "60px" : "20px";
+  const contentPaddingTop = isLoweredLayout ? "0" : "20px";
+
   const speak = (text: string) => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
@@ -301,8 +312,8 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
   const tileLabelPx = 17 * fontScale * buttonScale;
   const tileSubPx = 12 * fontScale;
   const tileMinH = 130 * buttonScale;
-  const tileMinW = 200 * buttonScale;
-  const panelTranslateY = `${layoutOffsetPercent}px`;
+  const tileMinW = isLoweredLayout ? 240 * buttonScale : 200 * buttonScale;
+  const panelTranslateY = isLoweredLayout ? "0px" : `${layoutOffsetPercent * 8}px`;
 
   if (activePage) {
     return (
@@ -406,18 +417,62 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
-          padding: "20px 24px",
+          justifyContent: contentJustify,
+          padding: `${contentPaddingTop} 24px ${contentPaddingBottom}`,
           transform: `translateY(${panelTranslateY})`,
         }}
         className={TRANSITION}
       >
+        {/* Posture mode badge */}
+        {isWheelchair && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: "10px 22px",
+              borderRadius: 12,
+              background: highContrast ? "#003300" : "#0a2a10",
+              border: `2px solid ${accentColor}`,
+              color: accentColor,
+              fontSize: 18 * fontScale,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+            className={TRANSITION}
+          >
+            <span style={{ fontSize: 26 }}>♿</span>
+            Wheelchair Mode — buttons lowered
+          </div>
+        )}
+        {isChild && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: "10px 22px",
+              borderRadius: 12,
+              background: highContrast ? "#002233" : "#0a1e30",
+              border: `2px solid ${accentColor}`,
+              color: accentColor,
+              fontSize: 16 * fontScale,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+            className={TRANSITION}
+          >
+            <span style={{ fontSize: 24 }}>🧒</span>
+            Child Mode — larger buttons
+          </div>
+        )}
+
         <h2
           style={{
-            fontSize: 20 * fontScale,
+            fontSize: isLoweredLayout ? 16 * fontScale : 20 * fontScale,
             fontWeight: 600,
             color: textSecondary,
-            marginBottom: 24,
+            marginBottom: isLoweredLayout ? 16 : 24,
             letterSpacing: 2,
             textTransform: "uppercase",
           }}
@@ -447,10 +502,10 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(3, minmax(${tileMinW}px, 1fr))`,
-            gap: 18,
+            gridTemplateColumns: `repeat(${gridCols}, minmax(${tileMinW}px, 1fr))`,
+            gap: isLoweredLayout ? 24 : 18,
             width: "100%",
-            maxWidth: 900,
+            maxWidth: isLoweredLayout ? 700 : 900,
           }}
         >
           {MENU_IDS.map((id) => {
@@ -612,6 +667,9 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
         @media (max-width: 640px) {
           /* 2-column grid on narrow screens */
           div[style*="repeat(3"] {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          div[style*="repeat(2"] {
             grid-template-columns: repeat(2, 1fr) !important;
           }
         }

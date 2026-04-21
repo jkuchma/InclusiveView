@@ -18,20 +18,20 @@ function deriveAdaptation(
   // ── Posture-based layout adaptation ──────────────────────────────────
   switch (sensor.posture) {
     case "seated":
-      // Wheelchair / seated user: lower the interactive panel
-      layoutOffsetPercent = 20;
-      buttonScale = 1.15;
+      // Wheelchair / seated user: anchor content to screen bottom
+      layoutOffsetPercent = 0; // layout handled via flex-end in KioskScreen
+      buttonScale = 1.4;
       label = "Wheelchair / Seated";
       break;
     case "child":
-      // Child: lower the panel and scale up text for readability
-      layoutOffsetPercent = 25;
+      // Child: lower panel and scale up text for readability
+      layoutOffsetPercent = 0; // layout handled via flex-end in KioskScreen
       fontScale = 1.2;
-      buttonScale = 1.2;
+      buttonScale = 1.3;
       label = "Child";
       break;
     case "crouched":
-      layoutOffsetPercent = 15;
+      layoutOffsetPercent = 8;
       label = "Crouching";
       break;
     case "standing":
