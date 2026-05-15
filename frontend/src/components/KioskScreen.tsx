@@ -228,6 +228,7 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
   const [activePage, setActivePage] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>("en");
   const lastAnnouncementRef = useRef<string>("");
+  const hasPlayedVoiceIntroRef = useRef(false);
 
   const t = TRANSLATIONS[lang];
 
@@ -264,7 +265,11 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
 
   const getDetailPageGuidance = (page: string) => {
     const content = PAGE_CONTENT[page];
-    if (!content) return "Voice guidance enabled. Page loaded.";
+    if (!content) {
+      return hasPlayedVoiceIntroRef.current
+        ? "Page loaded."
+        : "Voice guidance enabled. Page loaded.";
+    }
     return `${content.title}. ${content.body} Press the back button to return to the main menu.`;
   };
 
@@ -283,11 +288,25 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
       lastAnnouncementRef.current = "";
       return;
     }
-    const announcement = activePage ? getDetailPageGuidance(activePage) : getMainMenuGuidance();
-    if (announcement !== lastAnnouncementRef.current) {
+
+    if (activePage) {
+      const announcement = getDetailPageGuidance(activePage);
+      if (announcement !== lastAnnouncementRef.current) {
+        speak(announcement);
+        lastAnnouncementRef.current = announcement;
+      }
+      return () => {
+        window.speechSynthesis?.cancel();
+      };
+    }
+
+    if (!hasPlayedVoiceIntroRef.current) {
+      const announcement = getMainMenuGuidance();
       speak(announcement);
       lastAnnouncementRef.current = announcement;
+      hasPlayedVoiceIntroRef.current = true;
     }
+
     return () => {
       window.speechSynthesis?.cancel();
     };
@@ -649,8 +668,18 @@ export const KioskScreen: React.FC<KioskScreenProps> = ({ adaptation, sensor }) 
       >
         <span>InclusiveView v0.3 — Sprint 3</span>
         <span>
-          Posture: <b style={{ color: textPrimary }}>{sensor.posture}</b> &nbsp;|&nbsp;
+          Posture: <b style={{ color: textPrimary }}>{sensor.posture}</b>
+          &nbsp;|&nbsp;
           Distance: <b style={{ color: textPrimary }}>{sensor.distance}</b>
+          &nbsp;|&nbsp;
+          Gaze:{" "}
+          <b style={{ color: textPrimary }}>
+            {sensor.gaze_detected
+              ? sensor.looking_at_screen
+                ? "Looking"
+                : "Not looking"
+              : "No face"}
+          </b>
         </span>
         <span style={{ color: accentColor }}>{adaptation.label || "Adapting…"}</span>
       </footer>

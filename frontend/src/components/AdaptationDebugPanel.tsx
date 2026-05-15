@@ -6,9 +6,7 @@ interface Props {
   adaptation: AdaptationParams;
   connected: boolean;
   caneStub: boolean;
-  gazeStub: boolean;
   onToggleCane: () => void;
-  onToggleGaze: () => void;
   visible: boolean;
   onToggleVisible: () => void;
 }
@@ -54,7 +52,7 @@ const stubBtn = (label: string, active: boolean, onClick: () => void) => (
       fontFamily: "monospace",
       transition: "all 0.2s",
     }}
-    title={`Press ${label.includes("Cane") ? "C" : "G"} key to toggle`}
+    title="Press C key to toggle"
   >
     {active ? "✓ " : "○ "}{label}
   </button>
@@ -65,9 +63,7 @@ export const AdaptationDebugPanel: React.FC<Props> = ({
   adaptation,
   connected,
   caneStub,
-  gazeStub,
   onToggleCane,
-  onToggleGaze,
   visible,
   onToggleVisible,
 }) => {
@@ -136,6 +132,22 @@ export const AdaptationDebugPanel: React.FC<Props> = ({
             {pill("posture", sensor.posture, sensor.posture !== "unknown" && sensor.posture !== "no_person")}
             {pill("distance", sensor.distance, sensor.distance !== "unknown")}
             {pill("landmarks", sensor.landmarks_detected ? "yes" : "no", sensor.landmarks_detected)}
+            {pill(
+              "gaze",
+              sensor.gaze_detected
+                ? sensor.looking_at_screen
+                  ? "on screen"
+                  : "away"
+                : "no face",
+              sensor.gaze_detected && sensor.looking_at_screen
+            )}
+            {pill(
+              "gazeRatio",
+              sensor.gaze_ratio != null ? sensor.gaze_ratio.toFixed(2) : "—",
+              sensor.gaze_ratio != null &&
+                sensor.gaze_ratio >= 0.33 &&
+                sensor.gaze_ratio <= 0.67
+            )}
           </div>
 
           {/* Adaptation */}
@@ -150,15 +162,14 @@ export const AdaptationDebugPanel: React.FC<Props> = ({
             {pill("voice", adaptation.voiceMode ? "ON" : "off", adaptation.voiceMode)}
           </div>
 
-          {/* Keyboard stubs */}
+          {/* Dev stub: white cane still simulated via keyboard */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ fontSize: 11, color: "#556", textTransform: "uppercase", letterSpacing: 1 }}>
-              Keyboard Stubs
+              Dev Stub
             </div>
             {stubBtn("White Cane (C)", caneStub, onToggleCane)}
-            {stubBtn("No Gaze (G)", gazeStub, onToggleGaze)}
             <div style={{ fontSize: 10, color: "#445", marginTop: 2 }}>
-              Press <b style={{ color: "#8aabcf" }}>C</b> or <b style={{ color: "#8aabcf" }}>G</b> on keyboard to toggle
+              Gaze is live from webcam. Press <b style={{ color: "#8aabcf" }}>C</b> for cane stub.
             </div>
           </div>
 

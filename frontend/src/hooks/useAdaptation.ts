@@ -6,8 +6,7 @@ const RECONNECT_DELAY_MS = 2000;
 
 function deriveAdaptation(
   sensor: SensorState,
-  caneStub: boolean,
-  gazeStub: boolean
+  caneStub: boolean
 ): AdaptationParams {
   let layoutOffsetPercent = 0;
   let fontScale = 1.0;
@@ -15,55 +14,71 @@ function deriveAdaptation(
   let buttonScale = 1.0;
   let label = "";
 
-  // ── Posture-based layout adaptation ──────────────────────────────────
   switch (sensor.posture) {
     case "seated":
-      // Wheelchair / seated user: anchor content to screen bottom
-      layoutOffsetPercent = 0; // layout handled via flex-end in KioskScreen
-      buttonScale = 1.4;
+      layoutOffsetPercent = 20;
+      buttonScale = 1.15;
       label = "Wheelchair / Seated";
       break;
+
     case "child":
-      // Child: lower panel and scale up text for readability
-      layoutOffsetPercent = 0; // layout handled via flex-end in KioskScreen
+      layoutOffsetPercent = 25;
       fontScale = 1.2;
-      buttonScale = 1.3;
+      buttonScale = 1.2;
       label = "Child";
       break;
+
     case "crouched":
-      layoutOffsetPercent = 8;
+      layoutOffsetPercent = 15;
       label = "Crouching";
       break;
+
     case "standing":
       layoutOffsetPercent = 0;
       label = "Standing";
       break;
+
     case "no_person":
       label = "No person detected";
       break;
+
     default:
       label = "Detecting…";
   }
 
-  // ── Distance-based visual adaptation ────────────────────────────────
   if (sensor.distance === "close") {
-    // User close → low vision indicator: increase font + contrast
-    fontScale = Math.max(fontScale, 1.6);
+    fontScale = Math.max(fontScale, 1.35);
     highContrast = true;
-    label += " | Close (Low Vision Mode)";
+    label += " | Close / Low Vision Mode";
   } else if (sensor.distance === "far") {
     fontScale = Math.min(fontScale, 0.9);
     label += " | Far";
   }
 
-  // ── Stub triggers ────────────────────────────────────────────────────
-  const voiceMode = caneStub || gazeStub;
+  const gazeNeedsAssistance =
+    sensor.gaze_detected === true &&
+    sensor.looking_at_screen === false;
+
+  const voiceMode = caneStub || gazeNeedsAssistance;
+
   if (voiceMode) {
     highContrast = true;
-    label += caneStub ? " | White Cane Detected" : " | No Eye Contact";
+
+    if (caneStub) {
+      label += " | White Cane Detected";
+    } else if (gazeNeedsAssistance) {
+      label += " | Not Looking at Screen";
+    }
   }
 
-  return { layoutOffsetPercent, fontScale, highContrast, buttonScale, voiceMode, label };
+  return {
+    layoutOffsetPercent,
+    fontScale,
+    highContrast,
+    buttonScale,
+    voiceMode,
+    label,
+  };
 }
 
 interface UseAdaptationReturn {
@@ -71,9 +86,7 @@ interface UseAdaptationReturn {
   adaptation: AdaptationParams;
   connected: boolean;
   caneStub: boolean;
-  gazeStub: boolean;
   toggleCane: () => void;
-  toggleGaze: () => void;
 }
 
 const DEFAULT_SENSOR: SensorState = {
@@ -81,13 +94,21 @@ const DEFAULT_SENSOR: SensorState = {
   distance: "unknown",
   landmarks_detected: false,
   timestamp_ms: 0,
+
+  gaze_detected: false,
+  looking_at_screen: true,
+  gaze_ratio: null,
+
+  torso_len: undefined,
+  nose_to_shoulder: undefined,
+  hips_visible: undefined,
 };
 
 export function useAdaptation(): UseAdaptationReturn {
   const [sensor, setSensor] = useState<SensorState>(DEFAULT_SENSOR);
   const [connected, setConnected] = useState(false);
   const [caneStub, setCaneStub] = useState(false);
-  const [gazeStub, setGazeStub] = useState(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -100,14 +121,20 @@ export function useAdaptation(): UseAdaptationReturn {
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
-    ws.onopen = () => setConnected(true);
+    ws.onopen = () => {
+      setConnected(true);
+    };
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as SensorState;
-        setSensor(data);
+        const data = JSON.parse(event.data) as Partial<SensorState>;
+
+        setSensor({
+          ...DEFAULT_SENSOR,
+          ...data,
+        });
       } catch {
-        // ignore malformed frames
+        // Ignore malformed WebSocket messages
       }
     };
 
@@ -116,13 +143,19 @@ export function useAdaptation(): UseAdaptationReturn {
       reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY_MS);
     };
 
-    ws.onerror = () => ws.close();
+    ws.onerror = () => {
+      ws.close();
+    };
   }, []);
 
   useEffect(() => {
     connect();
+
     return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+      }
+
       if (wsRef.current) {
         wsRef.current.onclose = null;
         wsRef.current.close();
@@ -130,25 +163,26 @@ export function useAdaptation(): UseAdaptationReturn {
     };
   }, [connect]);
 
-  // Keyboard shortcuts: C = white cane toggle, G = gaze (no eye contact) toggle
+  // Keyboard shortcut:
+  // C = simulate white cane detection
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "c" || e.key === "C") setCaneStub((v) => !v);
-      if (e.key === "g" || e.key === "G") setGazeStub((v) => !v);
+      if (e.key === "c" || e.key === "C") {
+        setCaneStub((v) => !v);
+      }
     };
+
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const adaptation = deriveAdaptation(sensor, caneStub, gazeStub);
+  const adaptation = deriveAdaptation(sensor, caneStub);
 
   return {
     sensor,
     adaptation,
     connected,
     caneStub,
-    gazeStub,
     toggleCane: () => setCaneStub((v) => !v),
-    toggleGaze: () => setGazeStub((v) => !v),
   };
 }

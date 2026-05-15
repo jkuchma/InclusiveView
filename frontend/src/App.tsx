@@ -4,8 +4,7 @@ import { AdaptationDebugPanel } from "./components/AdaptationDebugPanel";
 import { useAdaptation } from "./hooks/useAdaptation";
 
 function App() {
-  const { sensor, adaptation, connected, caneStub, gazeStub, toggleCane, toggleGaze } =
-    useAdaptation();
+  const { sensor, adaptation, connected, caneStub, toggleCane } = useAdaptation();
 
   const [debugVisible, setDebugVisible] = useState(true);
 
@@ -17,9 +16,7 @@ function App() {
         adaptation={adaptation}
         connected={connected}
         caneStub={caneStub}
-        gazeStub={gazeStub}
         onToggleCane={toggleCane}
-        onToggleGaze={toggleGaze}
         visible={debugVisible}
         onToggleVisible={() => setDebugVisible((v) => !v)}
       />
