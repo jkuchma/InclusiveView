@@ -13,6 +13,7 @@ Public kiosks can be found all around us such as in airports, grocery stores, ba
 - Color contrast mode
 - Text to speech
 - Gaze-based eye tracking for automatic switching between regular and text to speech and color contrast mode
+- Multi-language support (EN / ES / ZH / AR)
 ### How to Run
 This prototype in split into two applications: the frontend and the backend, which have to be run simultaneously in order to function. The instructions can also be found in a .txt file in the repo. Important to note, make sure you have a webcam plugged in if you're using desktop and to allow desktop apps access to your camera.
 
